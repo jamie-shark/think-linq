@@ -19,17 +19,24 @@ let nodeE = { Node = "e"; Connections = [] }
 let nodeD = { Node = "d"; Connections = [] }
 let nodeC = { Node = "c"; Connections = [nodeD;nodeE] }
 let nodeB = { Node = "b"; Connections = [nodeC] }
-let nodeA = { Node = "a"; Connections = [nodeB] }
+let nodeA = { Node = "a"; Connections = [nodeB;nodeE] }
 
 let GetNodes graph =
-	let rec helper = function
-		| [] -> []
+	let rec helper padding = function
+		| []      -> []
 		| (x::xs) -> match x with
-						| { Node = n; Connections = [] } -> [n] @ helper xs
-						| { Node = n; Connections = c }  -> [n] @ helper c @ helper xs
-	
-	helper [graph]
-	|> List.reduce (fun acc x -> sprintf "%s, %s" acc x)
+						| { Node = n; Connections = [] } -> [padding + n] @ helper padding xs
+						| { Node = n; Connections = c }  -> [padding + n] @ helper (padding + padding) c @ helper padding xs
+
+	let commaSeparated =
+		helper "" [graph]
+		|> List.reduce (fun acc x -> sprintf "%s, %s" acc x)
+
+	let tree =
+		helper "  " [graph]
+		|> List.reduce (fun acc x -> sprintf "%s\r\n%s" acc x)
+
+	tree
 
 GetNodes nodeA
 |> printfn "%s"
