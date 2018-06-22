@@ -11,8 +11,8 @@
 </Query>
 
 type Graph<'T> = {
-	Node: 'T
-	Connections: Graph<'T> list
+    Node: 'T
+    Connections: Graph<'T> list
 }
 
 let nodeE = { Node = "e"; Connections = [] }
@@ -22,21 +22,30 @@ let nodeB = { Node = "b"; Connections = [nodeC] }
 let nodeA = { Node = "a"; Connections = [nodeB;nodeE] }
 
 let GetNodes graph =
-	let rec helper padding = function
-		| []      -> []
-		| (x::xs) -> match x with
-						| { Node = n; Connections = [] } -> [padding + n] @ helper padding xs
-						| { Node = n; Connections = c }  -> [padding + n] @ helper (padding + padding) c @ helper padding xs
+    let flattenNodes =
+        let rec helper depth = function
+            | []      -> []
+            | (x::xs) -> match x with
+                            | { Node = n; Connections = [] } -> [(n, depth)] @ helper depth xs
+                            | { Node = n; Connections = c }  -> [(n, depth)] @ helper (depth + 1) c @ helper depth xs
 
-	let commaSeparated =
-		helper "" [graph]
-		|> List.reduce (fun acc x -> sprintf "%s, %s" acc x)
+        helper 0 [graph]
 
-	let tree =
-		helper "  " [graph]
-		|> List.reduce (fun acc x -> sprintf "%s\r\n%s" acc x)
+    let commaSeparated =
+        flattenNodes
+        |> List.map (fun (value, _) -> value)
+        |> List.reduce (fun acc x -> sprintf "%s, %s" acc x)
 
-	tree
+    let tree =
+        let rec pad = function
+            | 0 -> ""
+            | depth -> "\t" + pad (depth - 1)
+
+        flattenNodes
+        |> List.map (fun (value, depth) -> sprintf "%s%s" (pad depth) value)
+        |> List.reduce (fun acc x -> sprintf "%s\r\n%s" acc x)
+
+    tree
 
 GetNodes nodeA
 |> printfn "%s"
