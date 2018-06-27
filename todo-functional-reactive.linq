@@ -25,32 +25,42 @@ type Action =
     | Toggle of string
     | SetFilter of Filter
 
+let rec toggleCompletedAt index = function
+    | []                                      -> []
+    | { message = m; completed = c } as x::xs -> if m = index
+                                                 then { x with completed = not c }::toggleCompletedAt index xs
+                                                 else x::toggleCompletedAt index xs
+
+let filterReducer filter = function
+    | SetFilter f -> f
+    | _           -> filter
+
+let todosReducer todos = function
+    | Add m        -> todos @ [{ message = m; completed = false }]
+    | Toggle index -> toggleCompletedAt index todos
+    | _            -> todos
+
 let todoApp state message =
-    let rec toggleCompletedAt index = function
-        | []                                      -> []
-        | { message = m; completed = c } as x::xs -> if m = index
-                                                     then { x with completed = not c }::toggleCompletedAt index xs
-                                                     else x::toggleCompletedAt index xs
-    match message with
-        | Add message -> { state with todos = state.todos @ [{ message = message; completed = false }] }
-        | Toggle index -> { state with todos = toggleCompletedAt index state.todos }
-        | SetFilter filter -> { state with filter = filter }
+    {
+      filter = filterReducer state.filter message
+      todos  = todosReducer state.todos message
+    }
 
 let formatState { filter = f; todos = t } =
     let filter =
         match f with
-            | All -> id
+            | All       -> id
             | Completed -> List.filter (fun td -> td.completed)
-            | Active -> List.filter (fun td -> not td.completed)
+            | Active    -> List.filter (fun td -> not td.completed)
     let format todos =
         let displayStatus = function true -> "" | _ -> " - Incomplete!"
         let displayTodo { message = m; completed = c } = sprintf "* '%s'%s" m (displayStatus c)
         List.map displayTodo todos |> List.reduce (sprintf "%s\n\t%s")
     let display =
         let filterName = function
-            | All -> "All"
+            | All       -> "All"
             | Completed -> "Completed"
-            | Active -> "Active"
+            | Active    -> "Active"
         sprintf "%s Todos: \n\t%s\n\n" (filterName f)
     t |> filter |> format |> display
 
