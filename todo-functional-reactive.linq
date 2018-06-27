@@ -18,12 +18,16 @@ type Filter =
     | Active
 
 type State = { filter: Filter; todos: Todo list }
-let initialState = { filter = All; todos = [] }
 
 type Action =
     | Add of string
     | Toggle of string
     | SetFilter of Filter
+
+type Store<'State, 'Payload> =
+    { getState : unit -> 'State
+      dispatch : 'Payload -> 'Payload
+      subscribe : (unit -> unit) -> unit -> unit }
 
 let rec toggleCompletedAt index = function
     | []                                      -> []
@@ -64,14 +68,36 @@ let formatState { filter = f; todos = t } =
         sprintf "%s Todos: \n\t%s\n\n" (filterName f)
     t |> filter |> format |> display
 
-let app state message =
-    let result = todoApp state message
-    printf "%s" (formatState result)
-    result
+let rec createStore reducer init =
+    let mutable state = init
+    let mutable subs = Seq.empty
+    let dispatcher (action : 'Payload) =
+        state <- reducer state action
+        subs |> Seq.iter (fun s -> s())
+        action
+    let subscriber subscriber =
+        subs <- Seq.append subs [ subscriber ]
+        let index = Seq.length subs
+        fun () ->
+            subs <- subs
+                    |> Seq.mapi (fun i s -> i, s)
+                    |> Seq.filter (fun (i, e) -> i <> index)
+                    |> Seq.map (fun (i, s) -> s)
+    let getState = fun () -> state
+    {
+      getState = getState
+      dispatch = dispatcher
+      subscribe = subscriber
+    }
 
-app initialState <| Add "todo 1"
-|> app <| Add "todo 2"
-|> app <| SetFilter Active
-|> app <| Add "todo 3"
-|> app <| Toggle "todo 2"
-|> app <| SetFilter All |> ignore
+let initialState = { filter = All; todos = [] }
+let store = createStore todoApp initialState
+let printState () = printf "%s" (formatState <| store.getState())
+let subscriber = store.subscribe(printState) |> ignore
+
+store.dispatch(Add "todo 1") |> ignore
+store.dispatch(Add "todo 2") |> ignore
+store.dispatch(SetFilter Active) |> ignore
+store.dispatch(Add "todo 3") |> ignore
+store.dispatch(Toggle "todo 2") |> ignore
+store.dispatch(SetFilter All) |> ignore
