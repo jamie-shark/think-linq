@@ -19,17 +19,21 @@ let nodeE = { Node = "e"; Connections = [] }
 let nodeD = { Node = "d"; Connections = [] }
 let nodeC = { Node = "c"; Connections = [nodeD;nodeE] }
 let nodeB = { Node = "b"; Connections = [nodeC] }
-let nodeA = { Node = "a"; Connections = [nodeB;nodeE] }
+let nodeA = { Node = "a"; Connections = [nodeB;nodeC;nodeD;nodeE] }
+
+let isElementOf xs x = xs |> List.filter ((=) x) |> (<>) []
 
 let GetNodes graph =
     let flattenNodes =
-        let rec helper depth = function
+        let rec helper depth processed = function
             | []      -> []
-            | (x::xs) -> match x with
-                            | { Node = n; Connections = [] } -> [(n, depth)] @ helper depth xs
-                            | { Node = n; Connections = c }  -> [(n, depth)] @ helper (depth + 1) c @ helper depth xs
+            | (x::xs) -> if isElementOf processed x
+                         then helper depth processed xs
+                         else match x with
+                                | { Node = n; Connections = [] } -> [(n, depth)] @ helper depth (x::processed) xs
+                                | { Node = n; Connections = c }  -> [(n, depth)] @ helper (depth + 1) (x::processed) c @ helper depth (x::processed) xs
 
-        helper 0 [graph]
+        helper 0 [] [graph]
 
     let commaSeparated =
         flattenNodes
