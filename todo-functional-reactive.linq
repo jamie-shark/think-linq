@@ -10,6 +10,18 @@
   <Namespace>System.Threading</Namespace>
 </Query>
 
+let rec applyAt predicate selector = function
+    | []    -> []
+    | x::xs -> if  predicate x
+               then selector x :: applyAt predicate selector xs
+               else          x :: applyAt predicate selector xs
+
+let removeItemAt index xs =
+    xs
+    |> Seq.mapi (fun i x -> i, x)
+    |> Seq.filter (fun (i, _) -> i <> index)
+    |> Seq.map (fun (i, x) -> x)
+
 type Todo = { message: string; completed: bool }
 
 type Filter =
@@ -36,56 +48,30 @@ type Store<'State, 'Payload> =
       subscribe : (unit -> unit) -> unit -> unit
     }
 
-let rec applyAt predicate selector = function
-    | []    -> []
-    | x::xs -> if  predicate x
-               then selector x :: applyAt predicate selector xs
-               else          x :: applyAt predicate selector xs
-
-let filterReducer filter = function
-    | SetFilter f -> f
-    | _           -> filter
-
-let todosReducer todos = function
-    | Add m        -> todos @ [{ message = m; completed = false }]
-    | Toggle index -> applyAt (fun todo -> todo.message = index) (fun todo -> { todo with completed = not todo.completed }) todos
-    | _            -> todos
-
 let todoApp state message =
+    let filterReducer filter = function
+        | SetFilter f -> f
+        | _           -> filter
+    let todosReducer todos = function
+        | Add m        -> todos @ [{ message = m; completed = false }]
+        | Toggle index -> applyAt (fun todo -> todo.message = index) (fun todo -> { todo with completed = not todo.completed }) todos
+        | _            -> todos
     {
       filter = filterReducer state.filter message
       todos  = todosReducer state.todos message
     }
 
-let formatState state =
-    let formatTodo todo =
-        let statusMessage = function
-            | false -> " - Incomplete!"
-            | _ -> ""
-        statusMessage todo.completed
-        |> sprintf "* '%s'%s" todo.message
-    let itemDelimiter = "\n\t"
-    state.todos
-    |> filterTodos state.filter
-    |> Seq.map formatTodo
-    |> String.concat itemDelimiter
-    |> sprintf "%A Todos: %s%s\n\n" state.filter itemDelimiter
-
 let rec createStore reducer init =
     let mutable state = init
-    let mutable subs = Seq.empty
-    let dispatcher (action : 'Payload) =
+    let mutable subscribers = Seq.empty
+    let dispatcher action =
         state <- reducer state action
-        subs |> Seq.iter (fun s -> s())
+        subscribers |> Seq.iter (fun sub -> sub())
         action
+    let unsub index () = subscribers <- removeItemAt index subscribers
     let subscriber subscriber =
-        subs <- Seq.append subs [ subscriber ]
-        let index = Seq.length subs
-        fun () ->
-            subs <- subs
-                    |> Seq.mapi (fun i s -> i, s)
-                    |> Seq.filter (fun (i, e) -> i <> index)
-                    |> Seq.map (fun (i, s) -> s)
+        subscribers <- Seq.append subscribers [ subscriber ]
+        Seq.length subscribers |> (-) 1 |> unsub
     let getState = fun () -> state
     {
       getState = getState
@@ -96,10 +82,22 @@ let rec createStore reducer init =
 let initialState = { filter = All; todos = [] }
 let store = createStore todoApp initialState
 
-let subscriber =
+let consoleSubscription =
+    let formatState state =
+        let formatTodo todo =
+            let statusMessage = function
+                | false -> " - Incomplete!"
+                | _ -> ""
+            statusMessage todo.completed
+            |> sprintf "* '%s'%s" todo.message
+        let itemDelimiter = "\n\t"
+        state.todos
+        |> filterTodos state.filter
+        |> Seq.map formatTodo
+        |> String.concat itemDelimiter
+        |> sprintf "%A Todos: %s%s\n\n" state.filter itemDelimiter
     (fun () -> () |> store.getState |> formatState |> printf "%s")
     |> store.subscribe
-    |> ignore
 
 let dispatch action =
     action
@@ -113,3 +111,5 @@ SetFilter Active |> dispatch
 Add "todo 3"     |> dispatch
 Toggle "todo 2"  |> dispatch
 SetFilter All    |> dispatch
+
+consoleSubscription ()
