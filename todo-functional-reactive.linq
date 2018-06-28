@@ -17,6 +17,11 @@ type Filter =
     | Completed
     | Active
 
+let filterTodos = function
+    | All       -> id
+    | Completed -> Seq.filter (fun todo -> todo.completed)
+    | Active    -> Seq.filter (fun todo -> not todo.completed)
+
 type State = { filter: Filter; todos: Todo list }
 
 type Action =
@@ -25,15 +30,17 @@ type Action =
     | SetFilter of Filter
 
 type Store<'State, 'Payload> =
-    { getState : unit -> 'State
+    {
+      getState : unit -> 'State
       dispatch : 'Payload -> 'Payload
-      subscribe : (unit -> unit) -> unit -> unit }
+      subscribe : (unit -> unit) -> unit -> unit
+    }
 
-let rec toggleCompletedAt index = function
-    | []                                      -> []
-    | { message = m; completed = c } as x::xs -> if m = index
-                                                 then { x with completed = not c }::toggleCompletedAt index xs
-                                                 else x::toggleCompletedAt index xs
+let rec applyAt predicate selector = function
+    | []    -> []
+    | x::xs -> if  predicate x
+               then selector x :: applyAt predicate selector xs
+               else          x :: applyAt predicate selector xs
 
 let filterReducer filter = function
     | SetFilter f -> f
@@ -41,7 +48,7 @@ let filterReducer filter = function
 
 let todosReducer todos = function
     | Add m        -> todos @ [{ message = m; completed = false }]
-    | Toggle index -> toggleCompletedAt index todos
+    | Toggle index -> applyAt (fun todo -> todo.message = index) (fun todo -> { todo with completed = not todo.completed }) todos
     | _            -> todos
 
 let todoApp state message =
@@ -50,23 +57,19 @@ let todoApp state message =
       todos  = todosReducer state.todos message
     }
 
-let formatState { filter = f; todos = t } =
-    let filter =
-        match f with
-            | All       -> id
-            | Completed -> List.filter (fun td -> td.completed)
-            | Active    -> List.filter (fun td -> not td.completed)
-    let format todos =
-        let displayStatus = function true -> "" | _ -> " - Incomplete!"
-        let displayTodo { message = m; completed = c } = sprintf "* '%s'%s" m (displayStatus c)
-        List.map displayTodo todos |> List.reduce (sprintf "%s\n\t%s")
-    let display =
-        let filterName = function
-            | All       -> "All"
-            | Completed -> "Completed"
-            | Active    -> "Active"
-        sprintf "%s Todos: \n\t%s\n\n" (filterName f)
-    t |> filter |> format |> display
+let formatState state =
+    let formatTodo todo =
+        let statusMessage = function
+            | false -> " - Incomplete!"
+            | _ -> ""
+        statusMessage todo.completed
+        |> sprintf "* '%s'%s" todo.message
+    let itemDelimiter = "\n\t"
+    state.todos
+    |> filterTodos state.filter
+    |> Seq.map formatTodo
+    |> String.concat itemDelimiter
+    |> sprintf "%A Todos: %s%s\n\n" state.filter itemDelimiter
 
 let rec createStore reducer init =
     let mutable state = init
@@ -92,12 +95,21 @@ let rec createStore reducer init =
 
 let initialState = { filter = All; todos = [] }
 let store = createStore todoApp initialState
-let printState () = printf "%s" (formatState <| store.getState())
-let subscriber = store.subscribe(printState) |> ignore
 
-store.dispatch(Add "todo 1") |> ignore
-store.dispatch(Add "todo 2") |> ignore
-store.dispatch(SetFilter Active) |> ignore
-store.dispatch(Add "todo 3") |> ignore
-store.dispatch(Toggle "todo 2") |> ignore
-store.dispatch(SetFilter All) |> ignore
+let subscriber =
+    (fun () -> () |> store.getState |> formatState |> printf "%s")
+    |> store.subscribe
+    |> ignore
+
+let dispatch action =
+    action
+    |> store.dispatch
+    |> Dump
+    |> ignore
+
+Add "todo 1"     |> dispatch
+Add "todo 2"     |> dispatch
+SetFilter Active |> dispatch
+Add "todo 3"     |> dispatch
+Toggle "todo 2"  |> dispatch
+SetFilter All    |> dispatch
