@@ -10,37 +10,18 @@
   <Namespace>System.Threading</Namespace>
 </Query>
 
+let newavg (values:float seq) avg =
+    let total = Seq.reduce (+) values
+    let numOfItems = Seq.length values |> (+) 1
+    let nextValue = avg * numOfItems - total
+    if nextValue <= 0 then None else int nextValue |> Some
+
 let contains x = Seq.filter ((=) x) >> Seq.length >> (<>) 0
-let longContains (digit:int64) (long:int64) =
-    let longAsString = string long
-    let digitAsChar = (string >> char) digit
-    contains digitAsChar longAsString
-
-let numbersWithDigitInside (x : int64) (d : int64) =
-    let validNumbers = [1L..x] |> Seq.filter (longContains d)
-    let count = Seq.length >> int64
-    let sum = Seq.fold (+) 0L
-    let product = Seq.fold (*) 1L
-    
-    if Seq.isEmpty validNumbers
-        then [0L;0L;0L]
-        else [count validNumbers ; sum validNumbers ; product validNumbers]
-
 let Is expected actual =
     match expected = actual with
     | true -> printf "."
     | false -> printfn "F\nExpected %A but got %A" expected actual
 
-contains 2 [1;2;3] |> Is true
-contains 4 [1;2;3] |> Is false
-contains 'a' "abc" |> Is true
-contains 'd' "abc" |> Is false
-
-longContains 1L 111L |> Is true
-longContains 2L 111L |> Is false
-
-numbersWithDigitInside 5L 6L |> Is [0L;0L;0L]
-numbersWithDigitInside 7L 6L |> Is [1L;6L;6L]
-numbersWithDigitInside 11L 1L |> Is [3L;22L;110L]
-numbersWithDigitInside 20L 0L |> Is [2L;30L;200L]
-numbersWithDigitInside 44L 4L |> Is [9L;286L;5955146588160L]
+newavg [1.0] 1.0 |> Is (Some 1)
+newavg [1.0;3.0] 3.0 |> Is (Some 5)
+newavg [3.0] 1.0 |> Is None
